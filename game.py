@@ -7,7 +7,7 @@ import random
 import textwrap
 
 # TESTING controls how the game acts and will speed things certain things up for testing purposes.
-TESTING = False
+TESTING = True
 
 # Sets the maximum width that the text can go.
 SCREEN_WIDTH = 100
@@ -22,7 +22,7 @@ DEFAULT_INPUT = False
 SPEED_MODIFIER = 4
 
 # Defines wether to use the command prompt commands to clear the screen, or just print a bunch of times. Useful for when testing the code using IDLE. The first value is whether to do so, and the second value is the amount of times.
-CLEAR_PRINT = [False, 100]
+CLEAR_PRINT = [True, 100]
 
 ### PROGRAM FUNCTIONS ###
 
@@ -212,6 +212,7 @@ class Fees():
     def __init__(self, inshore_pots, offshore_pots, boat):
         self.inshore = inshore_pots
         self.offshore = offshore_pots
+        self.boat = boat
 
 
 class Dictator():
@@ -324,15 +325,36 @@ def weekday_wakeup_menu(help=False):
         return "sleep_in"
 
 
-def payment_table():
-    print("Weather | Inshore | Offshore")
-    print("----------------------------")
-    print("Good    | £{}      | £{}    ".format(
-        GAME.payments.inshore, GAME.payments.offshore)
-    )
-    print("Bad     | £{}      | {}     ".format(
-        GAME.fees.inshore, "-£" + str(GAME.fees.offshore)[1:]))
+def money(value):
+    if value > 0:
+        return "£" + str(value)
 
+    else:
+        return "-£" + str(value)[1:]
+        
+
+def payment_table(boat = False):
+    if not boat:
+        print("Weather | Inshore | Offshore")
+        print("----------------------------")
+        print("Good    | {}      | {}    ".format(
+            money(GAME.payments.inshore), money(GAME.payments.offshore))
+        )
+        print("Bad     | {}      | {}     ".format(
+            money(GAME.fees.inshore), money(GAME.fees.offshore)))
+
+    else:
+        print("Weather  | Inshore | Offshore | Boat")
+        print("------------------------------------")
+        print("Good     | {}      | {}       | £0  ".format(money(GAME.payments.inshore), money(GAME.payments.offshore)))
+        print("Bad      | {}      | {}      | £0  ".format(money(GAME.fees.inshore),money(GAME.fees.offshore)))
+        
+        print("Huricane | {}      | {}      | {}  ".format(
+            money(GAME.fees.inshore),
+            money(GAME.fees.offshore),
+            money(GAME.fees.boat)
+        ))
+        
 
 def game_help():
     help_needed_query = super_input(
@@ -372,7 +394,7 @@ def game_help():
 
         print("")
 
-        write_text("Here is where you get to make a crucial decision - how many lobsters you want to put where. You can put them in two places: inshore & offshore. When the weather is good, the amount you will be payed is like this:")
+        write_text("Here is where you get to make a crucial decision - how many lobsters you want to put where. You have 6 pot locations, so you can only get 6 pots and you can put them in two places: inshore & offshore. When the weather is good, the amount you will be payed is like this:")
 
         print("")
 
@@ -410,8 +432,118 @@ def game_help():
 
         print("")
 
+        input("(Press <ENTER> to continue) ")
+
+        print("")
+
         write_text(
-            "Finally, there is also the very slim chance of a hurricane. This occurs when there is bad weather 3 times in a row.")
+            "Finally, there is also the very slim chance of a hurricane. This occurs when there is bad weather 3 times in a row. In this unfortunate case, your boat will get broken and you will need to pay for a new one, which costs a hefty £150.")
+
+        print("")
+
+        # Render the payment table with a bot section.
+        payment_table(True)
+
+        print("")
+
+        input("(Press <ENTER> to continue) ")
+
+        print("")
+
+        write_text("So now you must make your choice: How many lobster pots do you want offshore and how many do you want inshore? (Remember that you can only have a total of 6) ")
+
+        print("")
+
+        while True:
+            clear()
+            
+            inshore_pots = int(super_input(
+
+                "How many inshore pots do you want [0-6]? ",
+                ">>> ",
+                str,
+                "I'm sorry, I don't understand. Try again:",
+                ">>> ",
+                list("0123456")
+
+            ))
+
+            offshore_pots = int(super_input(
+
+                "How many offshore pots do you want [0-6]? ",
+                ">>> ",
+                str,
+                "I'm sorry, I don't understand. Try again:",
+                ">>> ",
+                list("0123456")
+
+            ))
+
+            print("")
+
+            total = inshore_pots + offshore_pots
+
+            if total > 6:
+                write_text("Remember that you can only have a total of 6 pots. You have {}.".format(total))
+
+                print("")
+
+                input("(Press <ENTER> to try again) ")
+                continue
+
+            elif total < 6:
+                write_text("Are you sure, because you can have up to 6 pots. It doesn't cost anything to place them, it's only if there's a storm and they get broken.")
+
+                print("")
+
+                input("(Press <ENTER> to try again) ")
+
+                print("")
+
+
+            good_day_prediction = (3 * inshore_pots) + (5 * offshore_pots)
+            bad_day_prediction = (5 * inshore_pots) + (-6 * offshore_pots)
+            
+            write_text("So you've chosen: ")
+            print("Inshore: {}".format(inshore_pots))
+            print("Inshore: {}".format(offshore_pots))
+
+            print("")
+
+            print("Total: {}".format(total))
+            print("Predicted Earnings on a Good Day: {}".format(good_day_prediction))
+            print("Predicted Earnings on a Bad Day:  {}".format(bad_day_prediction))
+
+            print("")
+
+            go_ahead = super_input(
+
+                "Are you sure you want to proceed and place your pots like so?",
+                ">>> ",
+                str,
+                "I'm sorry, I don't understand. Try again: ",
+                ">>> ",
+                ["yes", "no", "y", "n"]
+
+            )[0].lower()
+
+            if go_ahead == "y":
+                break
+
+            elif go_ahead == "n":
+                print("")
+                
+                write_text("You're the boss, boss.")
+
+                print("")
+
+                input("(Press <ENTER> to reselect) ")
+
+                continue
+                    
+
+                
+            
 
     else:
         return
