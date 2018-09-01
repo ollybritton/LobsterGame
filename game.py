@@ -19,10 +19,17 @@ DEFAULT_DELAY = [0.1, 0.2]
 DEFAULT_INPUT = False
 
 # Speeds up/slows down all wait times to make gameplay faster. 2 = twice as fast, 0.5 = double speed.
-SPEED_MODIFIER = 4
+SPEED_MODIFIER = 1
 
 # Defines wether to use the command prompt commands to clear the screen, or just print a bunch of times. Useful for when testing the code using IDLE. The first value is whether to do so, and the second value is the amount of times.
 CLEAR_PRINT = [True, 100]
+
+### GENERAL NOTES ###
+# To Do:
+# - Implement a way of saving the game and loading up the save easily.
+# - Implement luck as part of the player and what choices they make affects this.
+# - Implement the lottery on Saturdays.
+# - Implement a way that the Dictator's mood controls causes random events/fines.
 
 ### PROGRAM FUNCTIONS ###
 
@@ -101,7 +108,7 @@ def clear():
         print("\n" * CLEAR_PRINT[1])
 
 
-def super_input(initial, initial_input, input_type, reprompt, reprompt_input, accepted=[]):
+def super_input(initial, initial_input, input_type, reprompt, reprompt_input, accepted=[], length=0):
     print(initial)
     given_input = input(initial_input)
 
@@ -120,7 +127,25 @@ def super_input(initial, initial_input, input_type, reprompt, reprompt_input, ac
 
             continue
 
-        if given_input.lower() not in accepted:
+        if type(given_input) == str:
+            if given_input.lower() not in accepted and accepted != []:
+                print("")
+
+                print(reprompt)
+                given_input = input(reprompt_input)
+
+                continue
+
+        try:
+            if len(str(given_input)) != length and length != 0:
+                print("")
+
+                print(reprompt)
+                given_input = input(reprompt_input)
+
+                continue
+
+        except:
             print("")
 
             print(reprompt)
@@ -145,6 +170,17 @@ def ordinal(num):
     return str(num) + suffix
 
 # =================== #
+
+
+class Player():
+    def __init__(self, name, cash, luck):
+        self.name = name
+        self.cash = cash
+        self.luck = luck
+        self.has_boat=True
+
+    def summarise(self):
+        return "{} Information: You have {} in cash.".format(self.name, money(self.cash))
 
 
 class Game():
@@ -172,6 +208,19 @@ class Weather():
         # Special rules about what might happen
         self.special = special
 
+    def storm(self):
+        chance_num = [int(x) for x in self.chance.split("/")]
+        for i in range(chance_num[0]):
+            rand = random.randint(1, chance_num[1])
+
+            if rand == 1:
+                return "bad"
+
+        return "good"
+
+    def set_weather(self, condition):
+        self.current = condition
+        self.history.append(condition)
 
 class Date():
     def __init__(self, day_count, day_name):
@@ -206,13 +255,15 @@ class Payments():
     def __init__(self, inshore_pots, offshore_pots, hotel):
         self.inshore = inshore_pots
         self.offshore = offshore_pots
+        self.hotel = hotel
 
 
 class Fees():
-    def __init__(self, inshore_pots, offshore_pots, boat):
+    def __init__(self, inshore_pots, offshore_pots, boat, rent):
         self.inshore = inshore_pots
         self.offshore = offshore_pots
         self.boat = boat
+        self.rent = rent
 
 
 class Dictator():
@@ -243,12 +294,19 @@ GAME = Game(
     fees=Fees(
         inshore_pots=5,
         offshore_pots=-6,
-        boat=-150
+        boat=-150,
+        rent=80
     ),
     dictator=Dictator(
         name="Holy Colonel Adolf Mussolini the Malevolent",
         mood="neutral"
     )
+)
+
+PLAYER = Player(
+    name="",
+    cash=0,
+    luck=0
 )
 
 
@@ -268,7 +326,7 @@ def intro():
 
         if start_query == "y":
             input("Let's get started! (Press <ENTER> to proceed) ")
-            return
+            break
 
         elif start_query == "n":
             exit_confirm_query = super_input(
@@ -283,8 +341,40 @@ def intro():
             else:
                 continue
 
+    welcome_message()
 
-def weekday_wakeup_menu(help=False):
+def welcome_message():
+    clear()
+
+    print("Type 'skip' to skip through this message at any time or press <ENTER> to proceed.\n")
+
+    starting_messages = [
+        f"As has already been said, you play the role of a lonely fisherman who has to try to think smartly about where to place his fishing pots in order to get enough money to live.",
+        f"Every morning, on weekdays, you can choose what you want to do. You can either:\n\n\t- 1. Go Lobster fishing.\n\t- 2. Go to the Hotel, or \n\t- 3. Go Back to Sleep.\n",
+        f"Hotel work involves doing various work at the hotel on the island that nobody can ever afford to go to. By doing this, you save yourself the chore of Lobster Fishing and earn {money(GAME.payments.hotel)}, but you cannot go Lobster Fishing.",
+        f"Going back to bed involves, well... going back to bed. It doesn't do much at all.",
+        f"Finally, the main option is lobster fishing. You make your way out of the shack you live in to your boat. You then need to decide where to place your pots.",
+        f"There are two options: inshore and offshore. On a normal, clear day, you will get {money(GAME.payments.inshore)} from any inshore pots you place and {money(GAME.payments.offshore)} from any offshore pots.",
+        f"However, if there is a storm (which there is a {GAME.weather.chance} of happening), all offshore pots are destroyed and you will have to pay {money(GAME.fees.offshore, is_fee=True)}. Since there is no offshore pots, supply and demand mean that you will now recieve {money(GAME.fees.inshore, is_fee=True)} for each pot you placed.\n\n"
+        f"Finally, there is one final situation. If you get bad weather three times in a row, there is a HURRICANE, which destroys your boat. New ones cost {money(GAME.fees.boat, is_fee=True)}. Eek.",
+        f"At the end of the week, you have to pay {money(GAME.fees.rent)} as rent for your shack. If you can't pay this much, you lose."
+    ]
+
+    for message in starting_messages:
+        enter_or_skip = input(message + " ")
+
+        if enter_or_skip == "skip":
+            return
+
+        else:
+            print("")
+
+    print("Here is the loss/gains in each situation summarized:")
+    payment_table(boat=True)
+
+    input("\nGood luck! ")
+
+def wakeup_menu(help=False):
     print("You stand beside your bed with a feeling of uncertantity. What do you want to do today?")
 
     print("")
@@ -325,246 +415,430 @@ def weekday_wakeup_menu(help=False):
         return "sleep_in"
 
 
-def money(value):
-    if value > 0:
-        return "£" + str(value)
+def afternoon_menu(help=False):
+    print("You look up the beach and gaze upon your residence. What do you want to do?")
+
+    print("")
+
+    print("\t1. Go back to your house.")
+
+    print("")
+
+    if not help:
+        selected_query = super_input(
+            "What would you like to do?",
+            ">>> ",
+            str,
+            "I'm sorry, I don't understand:",
+            ">>> ",
+            ["1"]
+        )
 
     else:
-        return "-£" + str(value)[1:]
-        
+        selected_query = super_input(
+            "What would you like to do?",
+            ">>> ",
+            str,
+            "I'm sorry, I don't understand:",
+            ">>> ",
+            ["1"]
+        )
 
-def payment_table(boat = False):
+    if selected_query == "1":
+        return "house"
+
+def name():
+    clear()
+
+    while True:
+        print("What would you like to be called?")
+        name = input(">>> ").title()
+
+        confirm = input(f"\nAre you sure you want to be called '{name}'? [Y,n] ").lower()
+
+        if confirm == "y" or confirm == "":
+            break
+
+        print("")
+
+    print("")
+
+    input("That's a bit of a stupid name. Press <ENTER> to continue. ")
+
+    PLAYER.name = name
+
+def money(value, sign="£", is_fee=False):
+    # Converts a
+    if value >= 0:
+        return sign + str(value)
+
+    elif value < 0 and is_fee:
+        return sign + str(value * -1)
+
+    else:
+        return f"-{sign}" + str(value)[1:]
+
+
+def payment_table(boat=False):
+    # Prints a table which contains information on the price of pots and boats.
     if not boat:
         print("Weather | Inshore | Offshore")
         print("----------------------------")
-        print("Good    | {}      | {}    ".format(
-            money(GAME.payments.inshore), money(GAME.payments.offshore))
-        )
-        print("Bad     | {}      | {}     ".format(
-            money(GAME.fees.inshore), money(GAME.fees.offshore)))
+        print(f"Good    | {money(GAME.payments.inshore)}      | {money(GAME.payments.offshore)}    ")
+        print(f"Bad     | {money(GAME.fees.inshore)}      | {money(GAME.fees.offshore)}     ")
 
     else:
         print("Weather  | Inshore | Offshore | Boat")
         print("------------------------------------")
-        print("Good     | {}      | {}       | £0  ".format(money(GAME.payments.inshore), money(GAME.payments.offshore)))
-        print("Bad      | {}      | {}      | £0  ".format(money(GAME.fees.inshore),money(GAME.fees.offshore)))
-        
+        print(f"Good     | {money(GAME.payments.inshore)}      | {money(GAME.payments.offshore)}       | £0  ")
+        print(f"Bad      | {money(GAME.fees.inshore)}      | {money(GAME.fees.offshore)}      | £0  ")
+
         print("Huricane | {}      | {}      | {}  ".format(
             money(GAME.fees.inshore),
             money(GAME.fees.offshore),
             money(GAME.fees.boat)
         ))
-        
 
-def game_help():
-    help_needed_query = super_input(
-        "Would you like some help to get you started [y, n]?",
-        ">>> ",
-        str,
-        "I'm sorry, I don't understand. Try again:",
-        ">>> ",
-        ["y", "n", "yes", "no"]
-    )[0].lower()
+def calculate_revenue(pot_choices):
+    inshore, offshore = pot_choices[0], pot_choices[1]
 
-    if help_needed_query == "y":
-        clear()
+    if GAME.weather.current == "good":
+        return [inshore * GAME.payments.inshore, offshore * GAME.payments.offshore]
 
-        # Print the current day.
-        print(GAME.date.get_day_string())
+    elif GAME.weather.current == "bad" or GAME.weather.current == "hurricane":
+        return [inshore * GAME.fees.inshore, offshore * GAME.fees.offshore]
 
-        # Add some space in the layout.
-        print("")
+def summarize_revenue(revenue):
+    clear()
 
-        write_text("Since this is your first day on this island, the Dictator, who you now know to be named {}, is cutting you off some slack. He's going to give you a chance to prove your skills as a lobster fisherman, and is only going to fine you £40 at the end of the week, instead of the full £80.".format(GAME.dictator.name))
+    inshore, offshore = revenue[0], revenue[1]
 
-        print("")
+    if inshore < 0:
+        print(f"You lost {money(inshore, is_fee=True)} due to the bad weather conditions from your inshore pots.")
 
-        write_text(
-            "To go lobster fishing, and thus prove your worth, you need to select 'Go Lobster Fishing' on the Wakeup Menu."
-        )
+    elif inshore == 0:
+        print(f"Since you didn't have any inshore pots, you made nothing from them.")
 
-        print("")
+    elif inshore > 0:
+        print(f"From your inshore pots, you made {money(inshore)} due to the weather conditions. Well done!")
 
-        # Print a wakeup menu - a list of things that you can do in the morning.
-        weekday_wakeup_menu(help=True)
+    print("")
 
-        print("")
+    if offshore < 0:
+        print(f"You lost {money(offshore, is_fee=True)} due to the bad weather conditions from your offshore pots.")
 
-        write_text("You make your way out of your tiny shack, and your eyes gaze upon what is your boat, when in reality it's just a falling apart mess.")
+    elif offshore == 0:
+        print(f"Since you didn't have any offshore pots, you made nothing from them.")
 
-        print("")
+    elif offshore > 0:
+        print(f"From your offshore pots, you made {money(offshore)} due to the good weather conditions. Well done!")
 
-        write_text("Here is where you get to make a crucial decision - how many lobsters you want to put where. You have 6 pot locations, so you can only get 6 pots and you can put them in two places: inshore & offshore. When the weather is good, the amount you will be payed is like this:")
+    print("")
 
-        print("")
+    if inshore + offshore < 0:
+        print(f"This means you lost a total of {money(inshore + offshore, is_fee=True)}.")
 
-        print("\tInshore: £{} per lobster inshore.".format(GAME.payments.inshore))
-        print("\tOffshore: £{} per lobster offshore.".format(
-            GAME.payments.offshore))
-
-        print("")
-
-        input("(Press <ENTER> to continue) ")
-
-        print("")
-
-        write_text("However, that is only when the weather is good. When the weather is bad, if you have any offshore lobster pots, they get swept away into the ocean and broken, and you have to pay for new ones straight away. However, since demand has gone up for lobsters, the ones inshore (which are protected from the storm) pay you more. Or put simply:")
-
-        print("")
-
-        print("\tInshore: £{} per lobster inshore.".format(GAME.fees.inshore))
-        print("\tOffshore: {} per lobster offshore.".format(
-            "-£" + str(GAME.fees.offshore)[1:])
-        )
-
-        print("")
-
-        input("(Press <ENTER> to continue) ")
-
-        print("")
-
-        write_text("So, to recap:")
-
-        print("")
-
-        # Render a payment table.
-        payment_table()
-
-        print("")
-
-        input("(Press <ENTER> to continue) ")
-
-        print("")
-
-        write_text(
-            "Finally, there is also the very slim chance of a hurricane. This occurs when there is bad weather 3 times in a row. In this unfortunate case, your boat will get broken and you will need to pay for a new one, which costs a hefty £150.")
-
-        print("")
-
-        # Render the payment table with a bot section.
-        payment_table(True)
-
-        print("")
-
-        input("(Press <ENTER> to continue) ")
-
-        print("")
-
-        write_text("So now you must make your choice: How many lobster pots do you want offshore and how many do you want inshore? (Remember that you can only have a total of 6) ")
-
-        print("")
-
-        while True:
-            clear()
-            
-            inshore_pots = int(super_input(
-
-                "How many inshore pots do you want [0-6]? ",
-                ">>> ",
-                str,
-                "I'm sorry, I don't understand. Try again:",
-                ">>> ",
-                list("0123456")
-
-            ))
-
-            offshore_pots = int(super_input(
-
-                "How many offshore pots do you want [0-6]? ",
-                ">>> ",
-                str,
-                "I'm sorry, I don't understand. Try again:",
-                ">>> ",
-                list("0123456")
-
-            ))
-
-            print("")
-
-            total = inshore_pots + offshore_pots
-
-            if total > 6:
-                write_text("Remember that you can only have a total of 6 pots. You have {}.".format(total))
-
-                print("")
-
-                input("(Press <ENTER> to try again) ")
-                continue
-
-            elif total < 6:
-                write_text("Are you sure, because you can have up to 6 pots. It doesn't cost anything to place them, it's only if there's a storm and they get broken.")
-
-                print("")
-
-                input("(Press <ENTER> to try again) ")
-
-                print("")
-
-
-            good_day_prediction = (3 * inshore_pots) + (5 * offshore_pots)
-            bad_day_prediction = (5 * inshore_pots) + (-6 * offshore_pots)
-            
-            write_text("So you've chosen: ")
-            print("Inshore: {}".format(inshore_pots))
-            print("Inshore: {}".format(offshore_pots))
-
-            print("")
-
-            print("Total: {}".format(total))
-            print("Predicted Earnings on a Good Day: {}".format(good_day_prediction))
-            print("Predicted Earnings on a Bad Day:  {}".format(bad_day_prediction))
-
-            print("")
-
-            go_ahead = super_input(
-
-                "Are you sure you want to proceed and place your pots like so?",
-                ">>> ",
-                str,
-                "I'm sorry, I don't understand. Try again: ",
-                ">>> ",
-                ["yes", "no", "y", "n"]
-
-            )[0].lower()
-
-            if go_ahead == "y":
-                break
-
-            elif go_ahead == "n":
-                print("")
-                
-                write_text("You're the boss, boss.")
-
-                print("")
-
-                input("(Press <ENTER> to reselect) ")
-
-                continue
-                    
-
-                
-            
+    elif inshore + offshore == 0:
+        print("In total, you made nothing. The losses/gains counter-acted themselves.")
 
     else:
-        return
+        print(f"This means that you made a toal of {money(inshore + offshore)}. Congrats!")
 
+    print("")
+
+    new_player_cash = PLAYER.cash + sum(revenue)
+
+    if new_player_cash < 0:
+        print(f"All of this means that you are now indebted {money(new_player_cash, is_fee = True)} to the state, so we will say you have '{money(new_player_cash)}' in cash. You previously had {money(PLAYER.cash)} in cash. If you still are in debt by next Sunday, you will be executed.")
+
+    elif new_player_cash == 0:
+        print(f"You now have {money(new_player_cash)} in total, which may be problamatic due to the fact you have to pay {money(GAME.fees.rent, is_fee=True)} for rent on Sunday. You previously had {money(PLAYER.cash)} in cash.")
+
+    elif sum(revenue) < 0 and new_player_cash > 0:
+        # The player lost money but still has a positive monetary value.
+        print(f"All of this means that at the end of the day you're left with {money(new_player_cash)}. You previously had {money(PLAYER.cash)} in cash.")
+
+    else:
+        print(f"Now you've gained {money(sum(revenue))}, you've got {money(new_player_cash)}! You previously had {money(PLAYER.cash)} in cash.")
+
+    input("(Press <ENTER> to continue) ")
+
+    clear()
+
+def pot_amount(pot_type, previous=None):
+    previous_type = list(
+        filter(lambda x: x != pot_type, ["inshore", "offshore"]))[0]
+
+    if previous == None:
+        pot_range = list("123456")
+
+    elif previous == 6:
+        print(f"Since you've chosen all {previous_type} pots, you cannot choose any more {pot_type} pots.")
+
+        return 0
+
+    else:
+        pot_range = 6 - previous
+        pot_range = "".join(list(map(lambda x: str(x + 1), range(pot_range))))
+
+    pots = input(f"How many {pot_type} pots would you like [{pot_range[0]}-{pot_range[-1]}, help] >>> ").lower()
+
+    while pots == "" or pots not in pot_range:
+        if pots == "help":
+            print("\nYou are currently deciding many pots you would like to place inshore and offshore for lobster fishing. Here is the reward/loss in different situations summarized:")
+
+            print("")
+
+            payment_table()
+
+            print("")
+
+            print("Please try again: ")
+            pots = input(f"How many {pot_type} pots would you like [{pot_range[0]}-{pot_range[-1]}, help] >>> ").lower()
+
+            print("")
+
+        else:
+            print(f"\nI'm sorry, I don't understand what you mean by '{pots}'. Please try again:")
+            pots = input(f"How many {pot_type} pots would you like [{pot_range[0]}-{pot_range[-1]}, help] >>> ").lower()
+
+            print("")
+
+    print("")
+
+    return int(pots)
+
+def inshore_offshore():
+    while True:
+        inshore = pot_amount("inshore")
+        offshore = pot_amount("offshore", previous=inshore)
+
+        print(f"You've chosen {inshore} inshore pots and {offshore} offshore pots.\n")
+        happy = super_input(
+            "Are you happy with this choice?",
+            "[Y,n] >>> ",
+            str,
+            "Sorry, I don't understand what you mean. Please try again:",
+            "[Y,n] >>> ",
+            ["yes","no","y","n",""]
+        )
+
+        if happy == "yes" or happy == "y" or happy == "":
+            break
+
+        else:
+            print("Ok, you can reselect:\n")
+
+
+    return [inshore, offshore]
+
+def test():
+    while True:
+        exec(input(">>> "))
 
 def main():
+    name()
+    clear()
+
     while True:
         clear()
 
-        # Print the current day.
-        write_text(GAME.date.get_day_string())
+        day_info = GAME.date.get_day_string()
+        print(day_info)
+        print("="*len(day_info))
 
-        # Add some space in the layout.
         print("")
 
-        # If it's the first time for the user, help them a bit.
-        if(GAME.date.day_count == 1):
-            game_help()
+        print(f"Hello, {PLAYER.name}. You currently have {money(PLAYER.cash)} in cash.\n")
 
+        if GAME.date.day_name == "Saturday":
+            print("It's Satuday! If you had a life, you could probably spend your time productively.")
+            input("(At this stage of the development of the game, you can't do anything. Once you've accepted this, hit <ENTER>) ")
+
+        elif GAME.date.day_name == "Sunday":
+            input("It's Sunday, AKA PAYMENT DAY! (Press <ENTER> to continue) ")
+            print("Let's see if you have enough money..\n.")
+
+            sleep(3)
+
+            if PLAYER.cash < 80:
+                input(f"Uh-oh. You only have {money(PLAYER.cash)}. Bye! ")
+                quit()
+
+            elif PLAYER.cash < 100:
+                input(f"You're really scraping the barrel with this one. ")
+                input(f"Since you have {money(PLAYER.cash)}, you're left with {money(PLAYER.cash - GAME.fees.rent)}. ")
+
+                print("")
+
+                input("(Press <ENTER> to continue) ")
+
+                PLAYER.cash -= GAME.fees.rent
+
+            else:
+                input(f"Since you have {money(PLAYER.cash)}, you're left with {money(PLAYER.cash - GAME.fees.rent)}. ")
+
+                print("")
+
+                input("(Press <ENTER> to continue) ")
+
+                PLAYER.cash -= GAME.fees.rent
+
+        else:
+            activity = wakeup_menu()
+
+            print(activity)
+
+            if activity == "lobster_fishing":
+                # Lobster Fishing
+                clear()
+                print("You've chosen: Lobster Fishing\n")
+
+                lobster_fishing()
+
+            elif activity == "hotel_work":
+                # Hotel Work
+                clear()
+                print("You've chosen: Hotel Work\n")
+
+                hotel_work()
+
+            elif activity == "sleep_in":
+                # Sleep In
+                clear()
+                print("You've chosen: Sleeping In?\n")
+                
+                sleep_in()
+
+
+        #######
         GAME.date.increment()
 
+def lobster_fishing():
+    pots = inshore_offshore()
+
+    weather_current = GAME.weather.storm()
+
+    if len(GAME.weather.history) > 1:
+        if weather_current == "bad" and weather_current[-2:] == ["bad", "bad"]:
+            GAME.weather.set_weather("hurricane")
+
+    elif weather_current == "bad":
+        GAME.weather.set_weather("bad")
+
+    else:
+        GAME.weather.set_weather("good")
+
+    if GAME.weather.current == "good":
+        print("Watching from the shore you see the weather is...\n")
+        sleep(3)
+
+        print("Good!")
+
+        input("\n(Press <ENTER> to continue) ")
+
+        revenues = calculate_revenue(pots)
+        summarize_revenue(revenues)
+
+        PLAYER.cash += sum(revenues)
+
+    elif GAME.weather.current == "bad":
+        print("Watching from the shore you see the weather is...\n")
+        sleep(3)
+
+        print("Bad! Poor luck.")
+
+        input("\n(Press <ENTER> to continue) ")
+
+        revenues = calculate_revenue(pots)
+        summarize_revenue(revenues)
+
+        PLAYER.cash += sum(revenues)
+
+    elif GAME.weather.current == "hurricane":
+        print("Watching from the shore you see...\n")
+        sleep(3)
+
+        print("A swirling torrent of wind causing havoc as it sweeps across the offshore bay, unfortunately destroying your boat!")
+
+        input("\n(Press <ENTER> to continue) ")
+
+        PLAYER.has_boat = False
+
+        revenues = calculate_revenue(pots)
+        summarize_revenue(revenues)
+
+        PLAYER.cash += sum(revenues)
+
+        if PLAYER.cash >= GAME.fees.boat:
+            purchase_boat = super_input(f"You currently have {money(PLAYER.cash)}, which is enough to purchase a {money(GAME.fees.boat, is_fee=True)} boat. Would you like to do so? ",
+            ">>>",
+            str,
+            "I'm sorry, I don't understand. Please try again:",
+            ">>> ",
+            ["yes", "no", "y", "n"]).lower()[0]
+
+            if purchase_boat == "y":
+                print(f"\nYou have purchased a new boat. You currently have {money(PLAYER.cash)}.")
+
+                input("\n(Press <ENTER> to continue) ")
+
+            else:
+                input("\nOk, this does mean you cannot go fishing tomorrow unless you buy a boat.\n\n(Press <ENTER> to continue) ")
+
+
+
+
+def hotel_work():
+    clear()
+    
+    print("You walk to the hotel that nobody can afford to work at and request to work.\n")
+
+    activity = random.choice([
+        "dish washing"
+    ])
+
+    if activity == "dish washing":
+        print(f"You walk to the hotel kitchen and see the great amount of dishes stacked up next to the sink. You are passed some soap and a cloth.")
+
+        print("\nPress the letters that come up on screen.")
+
+        input("(Press <ENTER> to continue) ")
+
+        for i in range(50):
+            print("")
+
+            letter = random.choice(list("abcdefghijklmnopqrstuvwxyz"))
+            char = input(f"{letter} ({i+1}/50) >>> ")
+
+            while letter[0] != char:
+                print("\nTry again:")
+                char = input(f"{letter} ({i+1}/50) >>> ")
+
+        print("")
+
+        input("You've finished washing the dishes. Press <ENTER> to wrap up your work at the hotel. ")
+
+    clear()
+
+    PLAYER.cash += GAME.payments.hotel
+
+    print(f"You are given {money(GAME.payments.hotel)} for your services, making your current cash {money(PLAYER.cash)}.")
+
+    print("")
+
+    input("(Press <ENTER> to continue) ")
+
+
+def sleep_in():
+    print("Why have you chosen that? You can't feel tired, this is a game! You've wasted some valuable fishing/working time. I hope you feel really happy.\n")
+
+    input("(Press <ENTER> to sleep) ")
+
+def setup():
+    pass
 
 if __name__ == "__main__":
-    main()
+    #intro()
+    #main()
+    test()
